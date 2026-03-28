@@ -1,0 +1,10 @@
+pandas
+scikit-learn
+xgboost
+lightgbm
+rank_bm25
+sentence-transformers
+transformers
+datasets
+fastapi
+uvicorn
