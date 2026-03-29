@@ -8,3 +8,5 @@ transformers
 datasets
 fastapi
 uvicorn
+networkx
+requests

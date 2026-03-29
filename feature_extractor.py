@@ -3,16 +3,24 @@ from sklearn.metrics.pairwise import cosine_similarity
 from sentence_transformers import SentenceTransformer, CrossEncoder
 import pandas as pd
 import numpy as np
+import os
+import pickle
 
 class FeatureExtractor:
-    def __init__(self, df):
+    def __init__(self, df=None, vectorizer_path=None):
         """
         Initialize feature extractors (TF-IDF, BERT bi-encoder, Cross-Encoder).
         """
         self.tfidf_vectorizer = TfidfVectorizer(stop_words='english')
         
-        all_text = df['title'].tolist() + df['abstract'].tolist() + df['query'].tolist()
-        self.tfidf_vectorizer.fit(all_text)
+        if df is not None:
+            # Training mode: fit on provided dataframe
+            all_text = df['title'].astype(str).tolist() + df['abstract'].astype(str).tolist() + df['query'].astype(str).tolist()
+            self.tfidf_vectorizer.fit(all_text)
+        elif vectorizer_path is not None and os.path.exists(vectorizer_path):
+            # Inference mode: load from disk
+            with open(vectorizer_path, 'rb') as f:
+                self.tfidf_vectorizer = pickle.load(f)
         
         # Bi-encoder for fast similarity
         self.bert_model = SentenceTransformer('all-MiniLM-L6-v2')
@@ -21,6 +29,11 @@ class FeatureExtractor:
         print("  Loading Cross-Encoder (ms-marco-MiniLM-L-6-v2)...")
         self.cross_encoder = CrossEncoder('cross-encoder/ms-marco-MiniLM-L-6-v2')
         
+    def save_vectorizer(self, path):
+        """Save TF-IDF vectorizer to disk."""
+        with open(path, 'wb') as f:
+            pickle.dump(self.tfidf_vectorizer, f)
+
     def get_feature_names(self):
         return [
             'bm25_score', 'tfidf_sim', 'q_title_sim', 'q_abstract_sim',
@@ -50,8 +63,8 @@ class FeatureExtractor:
         X = []
         for i in range(len(queries)):
             query = queries[i].lower()
-            title = titles[i].lower()
-            abstract = abstracts[i].lower()
+            title = str(titles[i]).lower()
+            abstract = str(abstracts[i]).lower()
             
             q_tokens = set(query.split())
             t_tokens = set(title.split())

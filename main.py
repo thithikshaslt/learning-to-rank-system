@@ -129,6 +129,16 @@ def main():
         model = train_lambdarank(X_train, y_train, g_train)
         model.booster_.save_model('ltr_model.txt')
         
+        # --- SAVE PERSISTENCE ARTIFACTS FOR Search API ---
+        print("\nSaving Search API persistence artifacts...")
+        extractor.save_vectorizer('tfidf_vectorizer.pkl')
+        with open('bm25_corpus.pkl', 'wb') as f:
+            pickle.dump({
+                'corpus': corpus,
+                'idx_to_paper': idx_to_paper
+            }, f)
+        print("Artifacts saved: ltr_model.txt, tfidf_vectorizer.pkl, bm25_corpus.pkl")
+        
         # Print feature importances
         importances = model.feature_importances_
         for name, imp in sorted(zip(X_train.columns, importances), key=lambda x: -x[1]):
