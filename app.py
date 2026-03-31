@@ -7,6 +7,10 @@ import numpy as np
 import pandas as pd
 from pydantic import BaseModel
 from typing import List, Optional
+from dotenv import load_dotenv
+
+# Load environment variables from .env
+load_dotenv()
 
 # Local imports
 from bm25 import BM25Retriever

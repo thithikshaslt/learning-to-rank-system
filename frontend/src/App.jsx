@@ -1,37 +1,59 @@
-import React, { useState, useEffect } from 'react';
-import { Search, Loader2, Share2, Info, Book, Clock, Award, Star, X, MousePointer2, GitBranch, HelpCircle, Layers, Fingerprint } from 'lucide-react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
+import { Search, Loader2, Clock, Award, Star, X, MousePointer2, GitBranch, HelpCircle, Layers, Fingerprint, ChevronDown, ChevronUp, Maximize, TrendingUp, Info } from 'lucide-react';
 import ForceGraph2D from 'react-force-graph-2d';
 import axios from 'axios';
 import { motion, AnimatePresence } from 'framer-motion';
 
+const THEME = {
+  primary: '#b794f4',
+  secondary: '#63b3ed',
+  accent: '#f687b3',
+  bg: '#0b0e14',
+  glass: 'rgba(255, 255, 255, 0.03)',
+  glassBorder: 'rgba(255, 255, 255, 0.08)',
+  textDim: '#9ca3af'
+};
+
+// Generates an aesthetic color string from a seed (used for rough clustering)
+const stringToColor = (str) => {
+  let hash = 0;
+  for (let i = 0; i < str.length; i++) hash = str.charCodeAt(i) + ((hash << 5) - hash);
+  const hue = Math.abs(hash) % 360;
+  return `hsl(${hue}, 70%, 65%)`;
+};
+
 const App = () => {
+  // Input tracking
+  const [searchTerm, setSearchTerm] = useState('');
+  
+  // Last successfully executed query
   const [query, setQuery] = useState('');
   const [loading, setLoading] = useState(false);
   const [results, setResults] = useState([]);
   const [graphData, setGraphData] = useState({ nodes: [], links: [] });
-  const [selectedNode, setSelectedNode] = useState(null);
+  
+  const [selectedNodeId, setSelectedNodeId] = useState(null);
+  const [hoveredNode, setHoveredNode] = useState(null);
 
-  // Premium Next-Gen Palette
-  const THEME = {
-    primary: '#b794f4',
-    secondary: '#63b3ed',
-    accent: '#f687b3',
-    bg: '#0b0e14',
-    glass: 'rgba(255, 255, 255, 0.03)',
-    glassBorder: 'rgba(255, 255, 255, 0.08)',
-    textDim: 'rgba(255, 255, 255, 0.7)'
-  };
+  // Graph Controls (Changed default limit to 15)
+  const [showEdges, setShowEdges] = useState(true);
+  const [clusterView, setClusterView] = useState(false);
+  const [nodeCount, setNodeCount] = useState(15); 
+  
+  const fgRef = useRef();
+  const listRefs = useRef({});
 
-  const handleSearch = async (e) => {
-    if (e) e.preventDefault();
-    if (!query) return;
-
+  // Trigger search ONLY on form submission (enter key or button click)
+  const performSearch = async (q) => {
     setLoading(true);
-    setResults([]); // Clear previous results to trigger entry animations
+    setResults([]);
+    setGraphData({ nodes: [], links: [] });
+    setSelectedNodeId(null);
     try {
-      const response = await axios.post('http://localhost:8001/search', { query });
-      setResults(response.data.results);
-      setGraphData(response.data.graph);
+      // Backend fetches top 50, but we filter display client-side using nodeCount slider limit
+      const response = await axios.post('http://localhost:8001/search', { query: q, top_k: 50 });
+      setResults(response.data.results || []);
+      setGraphData(response.data.graph || { nodes: [], links: [] });
     } catch (error) {
       console.error('Search error:', error);
     } finally {
@@ -39,28 +61,81 @@ const App = () => {
     }
   };
 
+  const handleManualSearch = (e) => {
+    e.preventDefault();
+    if (searchTerm && searchTerm.trim() !== '') {
+      setQuery(searchTerm.trim());
+      performSearch(searchTerm.trim());
+    }
+  };
+
+  // Sync List to Graph
+  const focusOnNode = useCallback((nodeId) => {
+    if (fgRef.current && graphData.nodes.length > 0) {
+      const gNode = graphData.nodes.find(n => n.id === nodeId);
+      if (gNode && typeof gNode.x === 'number') {
+        fgRef.current.centerAt(gNode.x, gNode.y, 800);
+        fgRef.current.zoom(8, 800);
+      }
+    }
+  }, [graphData]);
+
+  const handleItemClick = (paperId) => {
+    setSelectedNodeId(paperId);
+    focusOnNode(paperId);
+  };
+
+  // Sync Graph to List
+  const handleNodeClick = (node) => {
+    if (!node || !node.id) return;
+    setSelectedNodeId(node.id);
+    focusOnNode(node.id);
+    
+    // Scroll list
+    const el = listRefs.current[node.id];
+    if (el) {
+      el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }
+  };
+
+  // Filter local display based on node limit slider (default 15)
+  const displayedResults = React.useMemo(() => results.slice(0, nodeCount), [results, nodeCount]);
+  
+  const filteredGraphData = React.useMemo(() => {
+    const topPaperIds = new Set(displayedResults.map(p => p.paper_id));
+    // Keep nodes that are within the top nodeCount results, AND all bridge nodes connected to them
+    const validNodes = graphData.nodes.filter(n => n.is_bridge || topPaperIds.has(n.id));
+    const validNodeIds = new Set(validNodes.map(n => n.id));
+    // Keep links where both source and target exist
+    const validLinks = graphData.links.filter(l => 
+      validNodeIds.has(typeof l.source === 'object' ? l.source.id : l.source) &&
+      validNodeIds.has(typeof l.target === 'object' ? l.target.id : l.target)
+    );
+    return { nodes: validNodes, links: validLinks };
+  }, [graphData, displayedResults]);
+
   return (
     <div className="search-container">
       <header className="header">
         <div className="header-content">
           <div className="logo-area">
             <div className="logo-icon">
-              <Fingerprint size={24} color="#0b0e14" />
+              <TrendingUp size={22} color="#0b0e14" />
             </div>
-            <h1 className="logo-text">GraphSearch</h1>
+            <h1 className="logo-text">LTR Graph Search</h1>
           </div>
 
-          <form onSubmit={handleSearch} className="search-bar-wrapper">
-             <Search size={22} className="search-icon-inline" />
+          <form onSubmit={handleManualSearch} className="search-bar-wrapper">
+             <Search size={20} className="search-icon-inline" />
              <input
                type="text"
-               value={query}
-               onChange={(e) => setQuery(e.target.value)}
-               placeholder="Enter research query..."
+               value={searchTerm}
+               onChange={(e) => setSearchTerm(e.target.value)}
+               placeholder="Enter research query (e.g. contrastive learning)..."
                className="search-input"
              />
-             <button type="submit" className="search-submit-btn">
-                {loading ? <Loader2 size={18} className="animate-spin" /> : <MousePointer2 size={18} />}
+             <button type="submit" className="search-submit-btn" disabled={loading}>
+                {loading ? <Loader2 size={16} className="animate-spin" /> : <MousePointer2 size={16} />}
                 Search
              </button>
           </form>
@@ -69,259 +144,224 @@ const App = () => {
 
       <main className="main-grid">
         <div className="results-column">
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
-            <span style={{ fontSize: '0.9rem', color: THEME.textDim, opacity: 0.8, letterSpacing: '1px' }}>
+          <div className="results-header">
+            <span style={{ fontSize: '0.85rem', color: THEME.textDim, letterSpacing: '1px', fontWeight: 600 }}>
               RELEVANCE RANKED
             </span>
-            {results.length > 0 && (
-              <span style={{ fontSize: '0.8rem', color: THEME.primary, fontWeight: 600 }}>{results.length} Found</span>
+            {displayedResults.length > 0 && (
+              <span style={{ fontSize: '0.8rem', color: THEME.primary, fontWeight: 600 }}>Top {displayedResults.length} Results</span>
             )}
           </div>
 
           <div className="scroll-area">
-            {results.length === 0 && !loading && (
+            {loading && [1,2,3,4,5].map(k => (
+              <div key={k} className="paper-card" style={{ height: '140px' }}>
+                 <div className="skeleton" style={{ width: '80%', height: '20px', marginBottom: '12px' }} />
+                 <div className="skeleton" style={{ width: '60%', height: '20px', marginBottom: '16px' }} />
+                 <div style={{ display: 'flex', gap: '8px' }}>
+                    <div className="skeleton" style={{ width: '60px', height: '20px' }} />
+                    <div className="skeleton" style={{ width: '80px', height: '20px' }} />
+                 </div>
+              </div>
+            ))}
+            {!loading && results.length === 0 && (
               <div style={{ padding: '4rem 0', textAlign: 'center', opacity: 0.3 }}>
-                <Layers size={64} style={{ margin: '0 auto 1.5rem', color: THEME.primary }} />
-                <p style={{ fontSize: '1.1rem', color: '#fff' }}>Start your multi-stage search...</p>
+                <Layers size={56} style={{ margin: '0 auto 1.5rem', color: THEME.primary }} />
+                <p style={{ fontSize: '1rem', color: '#fff' }}>Execute a search query to see recommendations...</p>
               </div>
             )}
             <AnimatePresence>
-              {results.map((paper, idx) => (
-                <motion.div
-                  key={paper.paper_id}
-                  initial={{ opacity: 0, x: -20 }}
-                  animate={{ opacity: 1, x: 0 }}
-                  transition={{ delay: idx * 0.08, type: "spring", stiffness: 100 }}
-                  onClick={() => setSelectedNode({ ...paper, id: paper.paper_id })}
-                  className={`paper-card ${selectedNode?.paper_id === paper.paper_id ? 'active' : ''}`}
-                >
-                  <h3 className="paper-title">{paper.title}</h3>
-                  <div className="badge-row">
-                    <Badge icon={Clock} label={paper.year || 'N/A'} />
-                    <Badge icon={Award} label={`LTR Rank #${paper.final_rank || paper.rank_init}`} />
-                    {paper.pagerank > 0 && (
-                       <Badge icon={Star} label={`Authority PR: ${paper.pagerank.toFixed(4)}`} color={THEME.secondary} />
-                    )}
-                  </div>
-                </motion.div>
-              ))}
+              {!loading && displayedResults.map((paper, idx) => {
+                const isSelected = selectedNodeId === paper.paper_id;
+                return (
+                  <motion.div
+                    key={paper.paper_id}
+                    ref={el => listRefs.current[paper.paper_id] = el}
+                    initial={{ opacity: 0, y: 10 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ delay: Math.min(idx * 0.05, 0.5), type: "spring" }}
+                    onClick={() => handleItemClick(paper.paper_id)}
+                    className={`paper-card ${isSelected ? 'active' : ''}`}
+                  >
+                    <h3 className="paper-title">{paper.title}</h3>
+                    <div className="badge-row">
+                      <Badge icon={Clock} label={paper.year || 'N/A'} />
+                      <Badge icon={Award} label={`Rank #${paper.final_rank || paper.rank_init}`} />
+                      {paper.pagerank > 0 && (
+                         <Badge icon={Star} label={`PR: ${paper.pagerank.toFixed(4)}`} color={THEME.secondary} />
+                      )}
+                    </div>
+                    
+                    <AnimatePresence>
+                      {isSelected && (
+                        <motion.div
+                          initial={{ height: 0, opacity: 0 }}
+                          animate={{ height: 'auto', opacity: 1 }}
+                          exit={{ height: 0, opacity: 0 }}
+                          style={{ overflow: 'hidden' }}
+                        >
+                          <div className="paper-abstract">
+                            {paper.abstract}
+                          </div>
+                        </motion.div>
+                      )}
+                    </AnimatePresence>
+                    
+                    <div style={{ position: 'absolute', top: '1.25rem', right: '1.25rem', opacity: isSelected ? 1 : 0.2, transition: '0.3s' }}>
+                       {isSelected ? <ChevronUp size={18} color={THEME.primary} /> : <ChevronDown size={18} color="#fff" />}
+                    </div>
+                  </motion.div>
+                );
+              })}
             </AnimatePresence>
           </div>
         </div>
 
         <div className="graph-column">
-           <div className="graph-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <div>
-                <h2 style={{ fontSize: '1.4rem', margin: 0, fontWeight: 700, backgroundImage: `linear-gradient(to right, #fff, ${THEME.primary})`, WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent' }}>
-                    Citation Intelligence
-                </h2>
-                <p style={{ fontSize: '0.9rem', color: THEME.textDim, opacity: 0.6, marginTop: '0.4rem' }}>
-                    Visualizing shared heritage and authority clusters.
-                </p>
+           <div className="graph-top-bar" style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: '0.8rem' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', width: '100%', alignItems: 'center' }}>
+                <h2 className="graph-title">Citation Connections Graph</h2>
+                <div className="graph-controls">
+                   <label className="control-item" title="Toggle citation relationships">
+                      <input type="checkbox" checked={showEdges} onChange={e => setShowEdges(e.target.checked)} />
+                      Edges
+                   </label>
+                   <label className="control-item" title="Color code nodes by publication year">
+                      <input type="checkbox" checked={clusterView} onChange={e => setClusterView(e.target.checked)} />
+                      Clusters
+                   </label>
+                   <label className="control-item" style={{ minWidth: '130px' }} title="Adjust how many results to render">
+                      Limit: {nodeCount}
+                      <input type="range" min="5" max="50" step="5" value={nodeCount} onChange={e => setNodeCount(Number(e.target.value))} />
+                   </label>
+                   <button 
+                      className="focus-btn" 
+                      onClick={() => {
+                          if (selectedNodeId) focusOnNode(selectedNodeId);
+                          else if (fgRef.current) fgRef.current.zoomToFit(400);
+                      }}
+                   >
+                      <Maximize size={14} /> Focus
+                   </button>
+                </div>
               </div>
               
-              <div className="graph-legend-overlay">
-                 <div className="legend-chip">
-                    <span className="dot" style={{ background: '#fff' }}></span> Results
-                 </div>
-                 <div className="legend-chip">
-                    <span className="dot" style={{ background: THEME.primary + '80' }}></span> Bridge
+              <div style={{ display: 'flex', justifyContent: 'space-between', width: '100%', alignItems: 'center', background: 'rgba(0,0,0,0.2)', padding: '0.5rem 0.8rem', borderRadius: '8px' }}>
+                 <p style={{ margin: 0, fontSize: '0.8rem', color: THEME.textDim, opacity: 0.9, display: 'flex', alignItems: 'center', gap: '6px' }}>
+                    <Info size={14} color={THEME.secondary} />
+                    <strong>Graph Guide:</strong> Nodes represent research papers. Larger nodes indicate high Authority Index. Lines are citations.
+                 </p>
+                 <div style={{ display: 'flex', gap: '1rem' }}>
+                    <div className="legend-chip">
+                       <span className="dot" style={{ background: 'rgba(255,255,255,0.85)' }}></span> Query Result
+                    </div>
+                    <div className="legend-chip">
+                       <GitBranch size={10} color={THEME.textDim} style={{marginRight: '2px'}}/> 
+                       <span className="dot" style={{ background: THEME.textDim, opacity: 0.8 }}></span> Shared Bridge
+                    </div>
                  </div>
               </div>
            </div>
 
            <div className="graph-container">
-              {graphData.nodes.length > 0 ? (
-                <ForceGraph2D
-                  graphData={graphData}
-                  linkColor={() => THEME.primary + '20'}
-                  linkDirectionalArrowLength={5}
-                  linkDirectionalArrowRelPos={1}
-                  linkCurvature={0.25}
-                  nodeRelSize={7}
-                  backgroundColor={THEME.bg}
-                  nodeLabel={node => `${node.title} (${node.year || 'N/A'})`}
-                  nodeCanvasObject={(node, ctx, globalScale) => {
-                    // SAFETY CHECK: Ensure coordinates are finite before drawing
-                    if (!node || !isFinite(node.x) || !isFinite(node.y)) return;
+              {filteredGraphData.nodes.length > 0 ? (
+                <>
+                  <ForceGraph2D
+                    ref={fgRef}
+                    graphData={filteredGraphData}
+                    // Edges
+                    linkColor={() => showEdges ? THEME.primary + '30' : 'transparent'}
+                    linkWidth={showEdges ? 1.5 : 0}
+                    linkDirectionalArrowLength={showEdges ? 4 : 0}
+                    linkDirectionalArrowRelPos={1}
+                    linkCurvature={0.2}
+                    // Force Engine
+                    d3AlphaDecay={0.02}
+                    d3VelocityDecay={0.1}
+                    backgroundColor={THEME.bg}
+                    onNodeHover={(node) => setHoveredNode(node)}
+                    onNodeClick={handleNodeClick}
+                    nodeCanvasObject={(node, ctx, globalScale) => {
+                      if (!node || !isFinite(node.x) || !isFinite(node.y)) return;
 
-                    const label = node.title?.split(' ').slice(0, 3).join(' ') + '...';
-                    const fontSize = 12/globalScale;
-                    ctx.font = `500 ${fontSize}px Outfit`;
-                    const textWidth = ctx.measureText(label).width;
+                      const isSelected = selectedNodeId === node.id;
+                      const isHovered = hoveredNode?.id === node.id;
+                      const isBridge = node.is_bridge;
 
-                    const isSelected = selectedNode?.id === node.id;
-                    const isBridge = node.is_bridge;
+                      // Size based on relevance/PageRank if not bridge
+                      const baseRadius = isBridge ? 4 : 6 + (node.pagerank ? node.pagerank * 10 : 0);
+                      const radius = Math.min(Math.max(baseRadius, 3), 12); // Clamped
 
-                    // Shadow Casting
-                    if (isSelected) {
-                        ctx.shadowBlur = 20;
-                        ctx.shadowColor = THEME.primary;
-                    }
+                      // Cluster Color Logic
+                      let nodeColor = 'rgba(255,255,255,0.7)';
+                      if (clusterView) {
+                         const clusterSeed = node.year || (isBridge ? 'bridge' : 'recent');
+                         nodeColor = isBridge ? THEME.textDim : stringToColor(String(clusterSeed));
+                      } else {
+                         nodeColor = isBridge ? THEME.textDim : 'rgba(255,255,255,0.85)';
+                      }
 
-                    // Node Style
-                    try {
-                        const gradient = ctx.createRadialGradient(node.x, node.y, 0, node.x, node.y, 7);
-                        if (isSelected) {
-                            gradient.addColorStop(0, '#fff');
-                            gradient.addColorStop(1, THEME.primary);
-                        } else if (isBridge) {
-                            gradient.addColorStop(0, THEME.primary + '50');
-                            gradient.addColorStop(1, 'rgba(255,255,255,0.1)');
-                        } else {
-                            gradient.addColorStop(0, 'rgba(255,255,255,0.9)');
-                            gradient.addColorStop(1, 'rgba(255,255,255,0.4)');
-                        }
+                      // Glow for active/hovered
+                      if (isSelected || isHovered) {
+                          ctx.shadowBlur = 15;
+                          ctx.shadowColor = isSelected ? THEME.primary : '#fff';
+                      } else {
+                          ctx.shadowBlur = 0;
+                      }
 
-                        ctx.fillStyle = gradient;
-                        ctx.beginPath(); 
-                        ctx.arc(node.x, node.y, isBridge ? 4.5 : 7, 0, 2 * Math.PI, false); 
-                        ctx.fill();
-                    } catch (e) {
-                        // Fallback if gradient fails
-                        ctx.fillStyle = isSelected ? '#fff' : 'rgba(255,255,255,0.5)';
-                        ctx.beginPath(); 
-                        ctx.arc(node.x, node.y, isBridge ? 4.5 : 7, 0, 2 * Math.PI, false); 
-                        ctx.fill();
-                    }
-                    
-                    if (isSelected) {
-                        ctx.strokeStyle = '#fff';
-                        ctx.lineWidth = 2/globalScale;
-                        ctx.stroke();
-                    }
+                      ctx.beginPath(); 
+                      ctx.arc(node.x, node.y, radius, 0, 2 * Math.PI, false); 
+                      ctx.fillStyle = isSelected ? THEME.primary : nodeColor;
+                      ctx.fill();
+                      
+                      if (isSelected || isBridge) {
+                          ctx.strokeStyle = isSelected ? '#fff' : 'rgba(255,255,255,0.2)';
+                          ctx.lineWidth = 1.5/globalScale;
+                          ctx.stroke();
+                      }
 
-                    // Text Label
-                    if (globalScale > 1) {
-                      ctx.shadowBlur = 0;
-                      ctx.fillStyle = isSelected ? '#fff' : 'rgba(255,255,255,0.6)';
-                      ctx.fillText(label.toUpperCase(), node.x - textWidth / 2, node.y + 16);
-                    }
-                  }}
-                  onNodeClick={(node) => {
-                    const paper = results.find(r => r.paper_id === node.id);
-                    if (paper) {
-                        setSelectedNode({ ...paper, id: node.id });
-                    } else {
-                        setSelectedNode({ 
-                            title: node.title, 
-                            abstract: "This paper acts as a 'Bridge Paper'—a fundamental research node that links multiple results in your current exploration.",
-                            is_bridge: true,
-                            id: node.id,
-                            year: node.year,
-                            pagerank: node.pagerank
-                        });
-                    }
-                  }}
-                />
+                      // Draw Label if zoomed in or target
+                      if (globalScale > 1.2 || isSelected || isHovered) {
+                        const label = node.title?.length > 40 ? node.title.substring(0, 40) + '...' : node.title;
+                        const fontSize = 11/globalScale;
+                        ctx.font = `500 ${fontSize}px Inter`;
+                        ctx.textAlign = 'center';
+                        ctx.textBaseline = 'top';
+                        ctx.fillStyle = isSelected || isHovered ? '#fff' : 'rgba(255,255,255,0.6)';
+                        ctx.shadowBlur = 0;
+                        ctx.fillText(label, node.x, node.y + radius + 4/globalScale);
+                      }
+                    }}
+                  />
+                  
+                  {hoveredNode && hoveredNode.id !== selectedNodeId && (
+                     <div 
+                       className="graph-tooltip"
+                       style={{ 
+                         left: window.innerWidth < 800 ? '50%' : fgRef.current?.graph2ScreenCoords(hoveredNode.x, hoveredNode.y)?.x || 0, 
+                         top: fgRef.current?.graph2ScreenCoords(hoveredNode.x, hoveredNode.y)?.y || 0
+                       }}
+                     >
+                        <strong>{hoveredNode.year || 'Date N/A'}</strong> - {hoveredNode.title?.substring(0,60) + (hoveredNode.title?.length>60?'...':'')}
+                     </div>
+                  )}
+                </>
               ) : (
                 <div style={{ display: 'flex', flexDirection: 'column', height: '100%', alignItems: 'center', justifyContent: 'center', opacity: 0.1 }}>
                   <HelpCircle size={80} color="#fff" />
-                  <p style={{ marginTop: '1rem', color: '#fff' }}>Click "Search" to explore intelligence</p>
+                  <p style={{ marginTop: '1rem', color: '#fff' }}>Interactive citation relationships will appear here.</p>
                 </div>
               )}
-
-              <AnimatePresence>
-                {selectedNode && (
-                  <motion.div
-                    initial={{ scale: 0.95, opacity: 0, x: 50 }}
-                    animate={{ scale: 1, opacity: 1, x: 0 }}
-                    exit={{ scale: 0.95, opacity: 0, x: 50 }}
-                    className="detail-pane"
-                  >
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
-                            {selectedNode.is_bridge ? <GitBranch size={16} color={THEME.primary} /> : <Fingerprint size={16} color={THEME.secondary} />}
-                            <span style={{ fontSize: '0.75rem', textTransform: 'uppercase', color: THEME.primary, fontWeight: 700, letterSpacing: '1px' }}>
-                                {selectedNode.is_bridge ? "Foundational Link" : "Core Finding"}
-                            </span>
-                        </div>
-                        <button 
-                            onClick={() => setSelectedNode(null)}
-                            style={{ background: 'rgba(255,255,255,0.05)', border: 'none', color: '#fff', borderRadius: '50%', width: '32px', height: '32px', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
-                        >
-                            <X size={18} />
-                        </button>
-                    </div>
-
-                    <h3 style={{ margin: '0', fontSize: '1.6rem', fontWeight: 700, lineHeight: 1.4, color: '#fff' }}>{selectedNode.title}</h3>
-                    
-                    <div className="metric-grid">
-                      <div className="metric-box">
-                         <div className="metric-label">Authority Index</div>
-                         <div className="metric-value">{selectedNode.pagerank?.toFixed(4) || 'N/A'}</div>
-                      </div>
-                      {!selectedNode.is_bridge && (
-                        <div className="metric-box">
-                            <div className="metric-label">Relevance Score</div>
-                            <div className="metric-value">{selectedNode.ltr_score?.toFixed(3)}</div>
-                        </div>
-                      )}
-                    </div>
-
-                    <div style={{ padding: '1.5rem', background: 'rgba(255,255,255,0.02)', borderRadius: '16px', border: '1px solid rgba(255,255,255,0.05)' }}>
-                      <div className="metric-label" style={{ marginBottom: '1rem' }}>Expert Synthesis</div>
-                      <p className="abstract" style={{ margin: 0 }}>{selectedNode.abstract}</p>
-                    </div>
-
-                    <div className="badge-row" style={{ marginTop: 'auto' }}>
-                        <div className="badge" style={{ background: THEME.primary + '15', color: THEME.primary }}>
-                            <Clock size={14} /> {selectedNode.year || 'N/A'}
-                        </div>
-                        {!selectedNode.is_bridge && (
-                            <div className="badge" style={{ background: THEME.secondary + '15', color: THEME.secondary }}>
-                                <Award size={14} /> Ranked #{selectedNode.final_rank || selectedNode.rank_init}
-                            </div>
-                        )}
-                    </div>
-                  </motion.div>
-                )}
-              </AnimatePresence>
            </div>
         </div>
       </main>
-
-      <style>{`
-        .graph-legend-overlay {
-            position: absolute;
-            top: 2rem;
-            right: 2rem;
-            display: flex;
-            gap: 1rem;
-            z-index: 10;
-        }
-        .legend-chip {
-            background: rgba(255, 255, 255, 0.05);
-            backdrop-filter: blur(10px);
-            padding: 0.5rem 1rem;
-            border-radius: 100px;
-            font-size: 0.75rem;
-            color: #fff;
-            display: flex;
-            align-items: center;
-            gap: 0.6rem;
-            border: 1px solid rgba(255, 255, 255, 0.08);
-        }
-        .legend-chip .dot {
-            width: 8px;
-            height: 8px;
-            border-radius: 50%;
-        }
-        .animate-spin {
-          animation: spin 1s linear infinite;
-        }
-        @keyframes spin {
-          from { transform: rotate(0deg); }
-          to { transform: rotate(360deg); }
-        }
-      `}</style>
     </div>
   );
 };
 
 const Badge = ({ icon: Icon, label, color = "#fff" }) => (
   <div className="badge" style={{ color: color }}>
-    <Icon size={14} />
+    <Icon size={12} />
     {label}
   </div>
 );
