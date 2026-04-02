@@ -124,6 +124,10 @@ def search(request: QueryRequest):
                 p['pagerank'] = m['pagerank']
                 p['centrality'] = m['centrality']
                 
+                # Fetch missing metadata (Year) from the graph service
+                if m.get('year'):
+                    p['year'] = m['year']
+                
                 # Combine (Weights: LTR 60%, PageRank 40%)
                 # Normalizing pagerank (pagerank ranges from 0-1, but often very small)
                 # We'll use a simple log-scale or max-norm for display

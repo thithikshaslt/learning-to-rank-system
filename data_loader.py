@@ -56,26 +56,14 @@ def load_research_papers(samples=3000):
                 
     print(f"Filtering complete. Collected {len(papers)} papers in target domains.")
     
-    queries = [
-        "deep learning", "neural networks", "computer vision", "transformers", "reinforcement learning",
-        "natural language processing", "generative adversarial networks", "graph neural networks",
-        "transfer learning", "unsupervised learning", "semi-supervised learning", "few-shot learning",
-        "zero-shot classification", "self-supervised learning", "contrastive learning",
-        "attention mechanism", "recurrent neural networks", "convolutional neural networks",
-        "object detection", "image segmentation", "face recognition", "pose estimation",
-        "action recognition", "medical image analysis", "image generation", "text to image",
-        "machine translation", "question answering", "text summarization", "sentiment analysis",
-        "named entity recognition", "speech recognition", "text to speech", "speaker verification",
-        "autonomous driving", "robot path planning", "robotics manipulation", "meta learning",
-        "multi-agent reinforcement learning", "inverse reinforcement learning", "offline reinforcement learning",
-        "federated learning", "privacy preserving machine learning", "differential privacy",
-        "adversarial attacks", "adversarial robustness", "explainable ai", "interpretable machine learning",
-        "fairness in machine learning", "causal inference", "representation learning",
-        "knowledge graph", "recommender systems", "collaborative filtering", "time series forecasting",
-        "anomaly detection", "dimensionality reduction", "hyperparameter optimization",
-        "neural architecture search", "automl", "quantum machine learning", "large language models",
-        "vision transformers", "diffusion models", "active learning"
-    ]
+    # Load queries from text file
+    try:
+        with open('queries.txt', 'r') as f:
+            queries = [line.strip() for line in f if line.strip()]
+        print(f"Loaded {len(queries)} queries from queries.txt")
+    except FileNotFoundError:
+        print("Warning: queries.txt not found. Using a small default sample.")
+        queries = ["deep learning", "neural networks", "machine learning"]
     
     # --- BERT-based semantic labeling ---
     print("\nComputing BERT embeddings for semantic labels...")

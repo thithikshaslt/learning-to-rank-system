@@ -1,18 +1,33 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { Search, Loader2, Clock, Award, Star, X, MousePointer2, GitBranch, HelpCircle, Layers, Fingerprint, ChevronDown, ChevronUp, Maximize, TrendingUp, Info } from 'lucide-react';
+import { Search, Loader2, Clock, Award, Star, X, MousePointer2, GitBranch, HelpCircle, Layers, Fingerprint, ChevronDown, ChevronUp, Maximize, Info } from 'lucide-react';
 import ForceGraph2D from 'react-force-graph-2d';
 import axios from 'axios';
 import { motion, AnimatePresence } from 'framer-motion';
 
 const THEME = {
-  primary: '#b794f4',
-  secondary: '#63b3ed',
-  accent: '#f687b3',
-  bg: '#0b0e14',
-  glass: 'rgba(255, 255, 255, 0.03)',
-  glassBorder: 'rgba(255, 255, 255, 0.08)',
-  textDim: '#9ca3af'
+  primary: '#10b981',
+  secondary: '#7dd3fc',
+  accent: '#f59e0b',
+  bg: '#050505',
+  glass: 'rgba(255, 255, 255, 0.02)',
+  glassBorder: 'rgba(255, 255, 255, 0.06)',
+  textDim: '#94a3b8'
 };
+
+const Logo = () => (
+  <svg width="24" height="24" viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg">
+    <linearGradient id="logoGrad" x1="0%" y1="100%" x2="100%" y2="0%">
+      <stop offset="0%" style={{stopColor: '#10b981', stopOpacity: 1}} />
+      <stop offset="100%" style={{stopColor: '#7dd3fc', stopOpacity: 1}} />
+    </linearGradient>
+    <path d="M4 24L12 16L18 22L28 8" stroke="url(#logoGrad)" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" />
+    <path d="M20 8H28V16" stroke="url(#logoGrad)" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" />
+    <circle cx="4" cy="24" r="2" fill="#10b981" />
+    <circle cx="12" cy="16" r="2" fill="#10b981" />
+    <circle cx="18" cy="22" r="2" fill="#10b981" />
+    <circle cx="28" cy="8" r="2" fill="#7dd3fc" />
+  </svg>
+);
 
 // Generates an aesthetic color string from a seed (used for rough clustering)
 const stringToColor = (str) => {
@@ -38,7 +53,6 @@ const App = () => {
   // Graph Controls (Changed default limit to 15)
   const [showEdges, setShowEdges] = useState(true);
   const [clusterView, setClusterView] = useState(false);
-  const [nodeCount, setNodeCount] = useState(15); 
   
   const fgRef = useRef();
   const listRefs = useRef({});
@@ -98,8 +112,8 @@ const App = () => {
     }
   };
 
-  // Filter local display based on node limit slider (default 15)
-  const displayedResults = React.useMemo(() => results.slice(0, nodeCount), [results, nodeCount]);
+  // Filter local display based on top 15 results
+  const displayedResults = React.useMemo(() => results.slice(0, 15), [results]);
   
   const filteredGraphData = React.useMemo(() => {
     const topPaperIds = new Set(displayedResults.map(p => p.paper_id));
@@ -120,9 +134,9 @@ const App = () => {
         <div className="header-content">
           <div className="logo-area">
             <div className="logo-icon">
-              <TrendingUp size={22} color="#0b0e14" />
+              <Logo />
             </div>
-            <h1 className="logo-text">LTR Graph Search</h1>
+            <h1 className="logo-text">LTR</h1>
           </div>
 
           <form onSubmit={handleManualSearch} className="search-bar-wrapper">
@@ -229,10 +243,6 @@ const App = () => {
                    <label className="control-item" title="Color code nodes by publication year">
                       <input type="checkbox" checked={clusterView} onChange={e => setClusterView(e.target.checked)} />
                       Clusters
-                   </label>
-                   <label className="control-item" style={{ minWidth: '130px' }} title="Adjust how many results to render">
-                      Limit: {nodeCount}
-                      <input type="range" min="5" max="50" step="5" value={nodeCount} onChange={e => setNodeCount(Number(e.target.value))} />
                    </label>
                    <button 
                       className="focus-btn" 
