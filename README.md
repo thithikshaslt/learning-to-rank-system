@@ -91,7 +91,7 @@ The dashboard will be available at `http://localhost:5173`.
 
 ---
 
-## 🧬 How It Works (The Pipeline)
+## 🧬 Project Pipeline
 
 1. **User Query**: User enters a search term in the dashboard.
 2. **Recall (BM25)**: The backend fetches the top 50 matches from the indexed arXiv corpus.
@@ -105,7 +105,7 @@ The dashboard will be available at `http://localhost:5173`.
 ## 🛠️ Tech Stack
 
 - **Backend**: FastAPI, Scikit-Learn, LightGBM, Rank-BM25, Sentence-Transformers, NetworkX.
-- **Frontend**: React 19, Vite, Framer Motion, Lucide React, React-Force-Graph, D3.js.
+- **Frontend**: ReactJS, Vite, Framer Motion, Lucide React, React-Force-Graph, D3.js.
 - **Data Source**: arXiv (via Hugging Face Datasets), Semantic Scholar API.
 
 ---
