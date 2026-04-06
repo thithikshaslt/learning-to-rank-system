@@ -59,7 +59,7 @@ def load_models():
         print("Successfully loaded all models and services!")
     except Exception as e:
         print(f"Error loading models: {e}")
-        # For demo purposes, if loading fails (e.g. file missing), we'll handle gracefully in the endpoint
+        
 
 @app.post("/search")
 def search(request: QueryRequest):
@@ -124,7 +124,7 @@ def search(request: QueryRequest):
                 p['pagerank'] = m['pagerank']
                 p['centrality'] = m['centrality']
                 
-                # Fetch missing metadata (Year) from the graph service
+                # Fetch metadata (Year) from the graph service
                 if m.get('year'):
                     p['year'] = m['year']
                 

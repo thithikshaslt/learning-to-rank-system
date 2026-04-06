@@ -1,8 +1,6 @@
 from datasets import load_dataset
 import pandas as pd
-import random
 import re
-import numpy as np
 from sentence_transformers import SentenceTransformer
 from sklearn.metrics.pairwise import cosine_similarity
 
@@ -27,7 +25,7 @@ def load_research_papers(samples=3000):
         dataset = load_dataset('scientific_papers', 'arxiv', split=f'train[:{load_chunk}]')
     
     papers = []
-    relevant_cats = {'cs.AI', 'cs.LG', 'cs.CV'}
+    relevant_categories = {'cs.AI', 'cs.LG', 'cs.CV'}
     
     for item in dataset:
         categories = item.get('categories', '')
@@ -36,7 +34,7 @@ def load_research_papers(samples=3000):
         else:
             cats = set(categories.split())
             
-        if not (cats & relevant_cats):
+        if not (cats & relevant_categories):
             continue
             
         p_id = item.get('id', '')
