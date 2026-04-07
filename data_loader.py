@@ -15,45 +15,76 @@ def load_research_papers(samples=3000):
     Load arXiv research papers filtered by CS domains and generate query-document pairs.
     Uses strict BERT-based semantic labeling and class balancing.
     """
-    print(f"Loading arXiv dataset and filtering for CS.AI/LG/CV...")
-    
-    load_chunk = max(samples * 100, 500000)
+    # This slice reliably contains the 2018-2021 research papers.
     try:
-        dataset = load_dataset('gfissore/arxiv-abstracts-2021', split=f'train[:{load_chunk}]')
+        dataset = load_dataset('gfissore/arxiv-abstracts-2021', split='train[1400000:]')
+        dataset = dataset.shuffle(seed=42)
     except:
-        print("Fallback to alternative dataset 'scientific_papers'...")
-        dataset = load_dataset('scientific_papers', 'arxiv', split=f'train[:{load_chunk}]')
+        dataset = load_dataset('scientific_papers', 'arxiv', split='train[:100000]')
+        dataset = dataset.shuffle(seed=42)
     
     papers = []
-    relevant_categories = {'cs.AI', 'cs.LG', 'cs.CV'}
+    # Use lowercase for robust matching
+    relevant_categories = {'cs.ai', 'cs.lg', 'cs.cv', 'cs.cl', 'stat.ml'}
     
     for item in dataset:
-        categories = item.get('categories', '')
-        if isinstance(categories, list):
-            cats = set(categories)
+        raw_cats = item.get('categories', '')
+        if isinstance(raw_cats, list):
+            cats = set(c.lower() for c in raw_cats)
         else:
-            cats = set(categories.split())
+            cats = set(c.lower() for c in str(raw_cats).split())
             
         if not (cats & relevant_categories):
             continue
             
         p_id = item.get('id', '')
+        # Extract year from arXiv ID (Format: YYMM.xxxxx)
+        try:
+            if '.' in p_id:
+                year_num = int(p_id.split('.')[0][:2])
+                year = 2000 + year_num if year_num < 50 else 1900 + year_num
+            else:
+                year_match = re.search(r'/(\d{2})', p_id)
+                if year_match:
+                    year_num = int(year_match.group(1))
+                    year = 2000 + year_num if year_num < 50 else 1900 + year_num
+                else:
+                    year = 2010 
+        except:
+            year = 2010
+
+        # Only take papers from 2010 onwards
+        if year < 2010:
+            continue
+
         title = clean_text(item.get('title', ''))
         abstract = clean_text(item.get('abstract', ''))
         
         if title and abstract and len(abstract.split()) > 20:
             weighted_doc = (title + " ") * 3 + abstract
+            
+            # --- AUTHOR EXTRACTION ---
+            # Dataset has 'authors' as a plain string with '\n  ' separators
+            raw_authors = item.get('authors', '') or ''
+            authors = re.sub(r'\n\s*', ', ', raw_authors)  # newlines -> commas
+            authors = re.sub(r'\s+', ' ', authors).strip()  # normalize spaces
+
             papers.append({
                 'paper_id': p_id,
                 'title': title,
                 'abstract': abstract,
-                'document': weighted_doc
+                'document': weighted_doc,
+                'authors': authors,
+                'year': year
             })
             if len(papers) >= samples:
                 break
                 
     print(f"Filtering complete. Collected {len(papers)} papers in target domains.")
     
+    if len(papers) == 0:
+        raise ValueError("Critical Error: Collected 0 papers! The dataset slice from the end might be empty or formatted differently. Try using a smaller offset or checking the dataset metadata.")
+        
     # Load queries from text file
     try:
         with open('queries.txt', 'r') as f:
@@ -112,6 +143,7 @@ def load_research_papers(samples=3000):
                 'title': paper['title'],
                 'abstract': paper['abstract'],
                 'document': paper['document'],
+                'authors': paper['authors'],
                 'label': label,
                 'sim_score': sim
             })

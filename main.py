@@ -27,7 +27,9 @@ def main():
         'title': row['title'],
         'abstract': row['abstract'],
         'document': row['document'],
-        'paper_id': row['paper_id']
+        'paper_id': row['paper_id'],
+        'authors': row.get('authors', ''),
+        'year': row.get('year')
     } for i, row in enumerate(unique_papers_df.to_dict('records'))}
     
     corpus = [p['document'] for p in idx_to_paper.values()]
@@ -132,12 +134,21 @@ def main():
         # --- SAVE PERSISTENCE ARTIFACTS FOR Search API ---
         print("\nSaving Search API persistence artifacts...")
         extractor.save_vectorizer('tfidf_vectorizer.pkl')
+        
+        print("Pre-computing paper embeddings for similarity search (one-time)...")
+        corpus_docs = [p['document'] for p in idx_to_paper.values()]
+        paper_embeddings = extractor.bert_model.encode(corpus_docs, show_progress_bar=True)
+        
         with open('bm25_corpus.pkl', 'wb') as f:
             pickle.dump({
                 'corpus': corpus,
                 'idx_to_paper': idx_to_paper
             }, f)
-        print("Artifacts saved: ltr_model.txt, tfidf_vectorizer.pkl, bm25_corpus.pkl")
+            
+        with open('paper_embeddings.pkl', 'wb') as f:
+            pickle.dump(paper_embeddings, f)
+            
+        print("Artifacts saved: ltr_model.txt, tfidf_vectorizer.pkl, bm25_corpus.pkl, paper_embeddings.pkl")
         
         # Print feature importances
         importances = model.feature_importances_
